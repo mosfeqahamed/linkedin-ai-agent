@@ -1,12 +1,24 @@
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from beanie import Document, Indexed
 from pydantic import EmailStr, Field
 
 
+class UserRole(StrEnum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class User(Document):
     email: Indexed(EmailStr, unique=True)
     name: str | None = None
+
+    # Email + password auth
+    password_hash: str | None = None
+    is_verified: bool = False
+    role: UserRole = UserRole.USER
+    is_active: bool = True
 
     linkedin_user_id: str | None = None
     linkedin_access_token_encrypted: str | None = None

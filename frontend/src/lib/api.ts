@@ -1,5 +1,18 @@
 import { auth } from "./auth";
-import type { CreatePostInput, Post, UpdatePostInput, User } from "./types";
+import type {
+  AdminPostList,
+  AdminStats,
+  AdminUser,
+  AdminUserList,
+  CreatePostInput,
+  GenerateResponse,
+  MessageResponse,
+  Post,
+  TokenResponse,
+  UpdatePostInput,
+  User,
+  UserRole,
+} from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -33,10 +46,40 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  devLogin: (email: string, name?: string) =>
-    request<{ access_token: string; token_type: string }>("/auth/dev-login", {
+  register: (email: string, password: string, name?: string) =>
+    request<MessageResponse>("/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, name: name || null }),
+      body: JSON.stringify({ email, password, name: name || null }),
+    }),
+
+  verifyEmail: (email: string, otp: string) =>
+    request<TokenResponse>("/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ email, otp }),
+    }),
+
+  resendOtp: (email: string) =>
+    request<MessageResponse>("/auth/resend-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  login: (email: string, password: string) =>
+    request<TokenResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  forgotPassword: (email: string) =>
+    request<MessageResponse>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (email: string, otp: string, newPassword: string) =>
+    request<TokenResponse>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ email, otp, new_password: newPassword }),
     }),
 
   me: () => request<User>("/auth/me"),
@@ -47,10 +90,20 @@ export const api = {
   linkedinDisconnect: () =>
     request<null>("/auth/linkedin/disconnect", { method: "POST" }),
 
-  generate: (topic: string, description?: string) =>
-    request<{ generated_text: string }>("/generate", {
+  generate: (input: {
+    topic: string;
+    description?: string;
+    github_url?: string;
+    learning_modules?: string[];
+  }) =>
+    request<GenerateResponse>("/generate", {
       method: "POST",
-      body: JSON.stringify({ topic, description: description || null }),
+      body: JSON.stringify({
+        topic: input.topic,
+        description: input.description || null,
+        github_url: input.github_url || null,
+        learning_modules: input.learning_modules ?? null,
+      }),
     }),
 
   listPosts: () => request<Post[]>("/posts"),
@@ -74,4 +127,25 @@ export const api = {
 
   deletePost: (id: string) =>
     request<null>(`/posts/${id}`, { method: "DELETE" }),
+
+  adminStats: () => request<AdminStats>("/admin/stats"),
+
+  adminListUsers: (search?: string) =>
+    request<AdminUserList>(
+      `/admin/users${search ? `?search=${encodeURIComponent(search)}` : ""}`,
+    ),
+
+  adminUpdateUser: (
+    id: string,
+    data: { role?: UserRole; is_active?: boolean },
+  ) =>
+    request<AdminUser>(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+
+  adminDeleteUser: (id: string) =>
+    request<null>(`/admin/users/${id}`, { method: "DELETE" }),
+
+  adminListPosts: () => request<AdminPostList>("/admin/posts"),
 };

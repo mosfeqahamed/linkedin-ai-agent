@@ -11,16 +11,39 @@ export default function ComposePage() {
   const router = useRouter();
   const [topic, setTopic] = useState("");
   const [description, setDescription] = useState("");
+  const [githubUrl, setGithubUrl] = useState("");
   const [generatedText, setGeneratedText] = useState("");
   const [scheduledLocal, setScheduledLocal] = useState("");
+
+  // Repo analysis results (populated when a GitHub URL is used).
+  const [repoSummary, setRepoSummary] = useState<string | null>(null);
+  const [techStack, setTechStack] = useState<string[]>([]);
+  const [allModules, setAllModules] = useState<string[]>([]);
+  const [selectedModules, setSelectedModules] = useState<string[]>([]);
 
   useEffect(() => {
     if (!auth.get()) router.replace("/");
   }, [router]);
 
   const generate = useMutation({
-    mutationFn: () => api.generate(topic, description || undefined),
-    onSuccess: (data) => setGeneratedText(data.generated_text),
+    mutationFn: (vars: { isRegenerate: boolean }) =>
+      api.generate({
+        topic,
+        description: description || undefined,
+        github_url: githubUrl || undefined,
+        learning_modules: vars.isRegenerate ? selectedModules : undefined,
+      }),
+    onSuccess: (data, vars) => {
+      setGeneratedText(data.generated_text);
+      setRepoSummary(data.repo_summary);
+      setTechStack(data.tech_stack);
+      // Only seed the module chips on a fresh generation — a regenerate must
+      // keep the user's current selection.
+      if (!vars.isRegenerate) {
+        setAllModules(data.learning_modules);
+        setSelectedModules(data.learning_modules);
+      }
+    },
   });
 
   const schedule = useMutation({
@@ -30,9 +53,17 @@ export default function ComposePage() {
         description: description || undefined,
         generated_text: generatedText,
         scheduled_at: localToUtcIso(scheduledLocal),
+        repo_url: githubUrl || undefined,
+        repo_summary: repoSummary || undefined,
+        learning_modules: allModules.length ? selectedModules : undefined,
       }),
     onSuccess: () => router.push("/dashboard"),
   });
+
+  const toggleModule = (m: string) =>
+    setSelectedModules((cur) =>
+      cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m],
+    );
 
   const error =
     (generate.error as Error)?.message || (schedule.error as Error)?.message;
@@ -42,8 +73,8 @@ export default function ComposePage() {
       <div>
         <h1 className="text-2xl font-semibold">Compose a post</h1>
         <p className="mt-1 text-sm text-gray-600">
-          1. Enter a topic. 2. Generate a draft. 3. Edit if you want. 4.
-          Schedule.
+          Enter a topic — optionally point at a GitHub repo — generate a draft,
+          edit, then schedule.
         </p>
       </div>
 
@@ -75,18 +106,83 @@ export default function ComposePage() {
           />
         </div>
 
+        <div>
+          <label htmlFor="github" className="block text-sm font-medium">
+            GitHub repository URL (optional)
+          </label>
+          <input
+            id="github"
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            className="mt-1 w-full rounded border border-gray-300 p-2 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="https://github.com/owner/repo"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            The AI will read the repo and ground the post in what the project
+            actually does.
+          </p>
+        </div>
+
         <button
-          onClick={() => generate.mutate()}
+          onClick={() => generate.mutate({ isRegenerate: false })}
           disabled={!topic.trim() || generate.isPending}
           className="rounded bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {generate.isPending
-            ? "Generating…"
+            ? githubUrl
+              ? "Reading repo & generating…"
+              : "Generating…"
             : generatedText
               ? "Regenerate draft"
               : "Generate draft"}
         </button>
       </section>
+
+      {/* Repo analysis */}
+      {generatedText && repoSummary && (
+        <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-6">
+          <h2 className="text-sm font-semibold">Repository analysis</h2>
+          <p className="text-sm text-gray-600">{repoSummary}</p>
+          {techStack.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Tech: {techStack.join(", ")}
+            </p>
+          )}
+          {allModules.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-medium">
+                Learning modules — click to include or exclude, then regenerate:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {allModules.map((m) => {
+                  const on = selectedModules.includes(m);
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => toggleModule(m)}
+                      className={
+                        on
+                          ? "rounded-full bg-blue-600 px-3 py-1 text-xs text-white"
+                          : "rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-500 line-through"
+                      }
+                    >
+                      {m}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                onClick={() => generate.mutate({ isRegenerate: true })}
+                disabled={generate.isPending || selectedModules.length === 0}
+                className="mt-3 rounded border border-blue-600 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+              >
+                Regenerate with selected learnings
+              </button>
+            </div>
+          )}
+        </section>
+      )}
 
       {generatedText && (
         <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-6">

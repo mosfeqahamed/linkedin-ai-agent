@@ -2,9 +2,8 @@ from beanie import PydanticObjectId
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.security import decode_session_token
-
 
 bearer_scheme = HTTPBearer(auto_error=True)
 
@@ -24,4 +23,13 @@ async def get_current_user(
     user = await User.get(oid)
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "User not found")
+    if not user.is_active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been disabled")
+    return user
+
+
+async def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Dependency that allows only admin users through."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin access required")
     return user

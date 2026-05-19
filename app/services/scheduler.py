@@ -1,7 +1,7 @@
 """APScheduler with MongoDBJobStore — survives restarts."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -46,6 +46,15 @@ def init_scheduler() -> AsyncIOScheduler:
         hour=3,
         minute=0,
         id="refresh:linkedin_tokens",
+        replace_existing=True,
+    )
+
+    # Hourly sweep: remove accounts that were never email-verified within 24h.
+    _scheduler.add_job(
+        _cleanup_unverified_users_job,
+        trigger="cron",
+        minute=30,
+        id="cleanup:unverified_users",
         replace_existing=True,
     )
 
@@ -125,10 +134,20 @@ async def _publish_job(post_id: str) -> None:
         await post.save()
 
 
+async def _cleanup_unverified_users_job() -> None:
+    """Delete accounts that were never email-verified within 24h of registration."""
+    cutoff = datetime.now(UTC) - timedelta(hours=24)
+    result = await User.find(
+        User.is_verified == False,  # noqa: E712
+        User.created_at < cutoff,
+    ).delete()
+    deleted = getattr(result, "deleted_count", 0)
+    if deleted:
+        log.info("Cleaned up %s unverified account(s)", deleted)
+
+
 async def _refresh_linkedin_tokens_job() -> None:
     """Refresh LinkedIn access tokens that are within 7 days of expiry."""
-    from datetime import timedelta
-
     threshold = datetime.now(UTC) + timedelta(days=7)
     users = await User.find(
         User.linkedin_refresh_token_encrypted != None,  # noqa: E711

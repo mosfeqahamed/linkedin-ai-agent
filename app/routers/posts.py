@@ -10,7 +10,6 @@ from app.schemas import CreatePostRequest, PostResponse, UpdatePostRequest
 from app.services.deepseek import generate_post
 from app.services.scheduler import cancel_scheduled_publish, schedule_publish
 
-
 router = APIRouter(prefix="/posts", tags=["posts"])
 
 
@@ -22,6 +21,9 @@ def _to_response(post: ScheduledPost) -> PostResponse:
         generated_text=post.generated_text,
         scheduled_at=post.scheduled_at,
         status=PostStatus(post.status),
+        repo_url=post.repo_url,
+        repo_summary=post.repo_summary,
+        learning_modules=post.learning_modules,
         linkedin_post_urn=post.linkedin_post_urn,
         error_message=post.error_message,
         publish_attempts=post.publish_attempts,
@@ -46,6 +48,9 @@ async def create_post(req: CreatePostRequest, user: User = Depends(get_current_u
         generated_text=req.generated_text,
         scheduled_at=scheduled_at,
         status=PostStatus.SCHEDULED,
+        repo_url=req.repo_url,
+        repo_summary=req.repo_summary,
+        learning_modules=req.learning_modules,
     )
     await post.insert()
     schedule_publish(str(post.id), scheduled_at)
@@ -112,8 +117,19 @@ async def regenerate_post(post_id: PydanticObjectId, user: User = Depends(get_cu
             f"Cannot regenerate a post in status '{post.status}'",
         )
 
+    # Re-use the stored repo analysis (if any) so regeneration stays on-topic
+    # without another GitHub fetch.
+    repo_analysis = None
+    if post.repo_url and post.repo_summary:
+        repo_analysis = {
+            "summary": post.repo_summary,
+            "tech_stack": [],
+            "key_features": [],
+            "learning_modules": post.learning_modules,
+        }
+
     try:
-        new_text = await generate_post(post.topic, post.description)
+        new_text = await generate_post(post.topic, post.description, repo_analysis)
     except Exception as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Generation failed: {e}")
 

@@ -1,9 +1,22 @@
 from datetime import UTC, datetime, timedelta
 
+import bcrypt
 from cryptography.fernet import Fernet
 from jose import JWTError, jwt
 
 from app.config import get_settings
+
+
+def hash_secret(plaintext: str) -> str:
+    """Hash a password or OTP with bcrypt. bcrypt caps input at 72 bytes."""
+    return bcrypt.hashpw(plaintext.encode()[:72], bcrypt.gensalt()).decode()
+
+
+def verify_secret(plaintext: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(plaintext.encode()[:72], hashed.encode())
+    except ValueError:
+        return False
 
 
 def _fernet() -> Fernet:

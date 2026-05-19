@@ -21,6 +21,11 @@ class ScheduledPost(Document):
     description: str | None = None
     generated_text: str
 
+    # Set when the post was generated from a GitHub repository.
+    repo_url: str | None = None
+    repo_summary: str | None = None
+    learning_modules: list[str] = []
+
     scheduled_at: Indexed(datetime)
     status: Indexed(str) = PostStatus.DRAFT
 

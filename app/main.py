@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import close_db, init_db
-from app.routers import auth, generate, posts
+from app.routers import admin, auth, generate, posts
 from app.services.scheduler import init_scheduler, shutdown_scheduler
 
 
@@ -28,7 +28,7 @@ def create_app() -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.frontend_origin],
+        allow_origins=settings.frontend_origin,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(generate.router)
     app.include_router(posts.router)
+    app.include_router(admin.router)
 
     @app.get("/health")
     async def health():

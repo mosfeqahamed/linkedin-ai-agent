@@ -2,9 +2,11 @@ from beanie import init_beanie
 from pymongo import AsyncMongoClient
 
 from app.config import get_settings
+from app.models.email_verification import EmailVerification
+from app.models.oauth_state import OAuthState
 from app.models.post import ScheduledPost
+from app.models.repo_cache import RepoCache
 from app.models.user import User
-
 
 _client: AsyncMongoClient | None = None
 
@@ -15,7 +17,13 @@ async def init_db() -> AsyncMongoClient:
     _client = AsyncMongoClient(settings.mongodb_uri)
     await init_beanie(
         database=_client[settings.mongodb_db_name],
-        document_models=[User, ScheduledPost],
+        document_models=[
+            User,
+            ScheduledPost,
+            EmailVerification,
+            OAuthState,
+            RepoCache,
+        ],
     )
     return _client
 
